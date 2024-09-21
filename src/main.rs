@@ -1,3 +1,7 @@
+use minifb::{Window, WindowOptions};
+const WIDTH: usize = 64;
+const HEIGHT: usize = 32;
+
 /// The `Emulator` struct represents a CHIP-8 emulator, containing the memory,
 /// registers, stack, program counter, and other state needed to emulate a CHIP-8 system.
 struct Emulator {
@@ -13,6 +17,10 @@ struct Emulator {
     sp: u8,
     /// Call stack, used for handling subroutines.
     stack: [u8; 16],
+    /// Minibuf window
+    window: Option<Window>,
+    /// Display
+    display: [[bool; WIDTH]; HEIGHT],
 }
 
 impl Emulator {
@@ -27,27 +35,60 @@ impl Emulator {
     }
     /// Load the default sprites in memory starting at address 0x50
     fn load_font_sprites(&mut self) {
-    let font_sprites: [u8; 80] = [
-        0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-        0x20, 0x60, 0x20, 0x20, 0x70, // 1
-        0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-        0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-        0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-        0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-        0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-        0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-        0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-        0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-        0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-        0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-        0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-        0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-        0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-        0xF0, 0x80, 0xF0, 0x10, 0xF0  // F
-    ];
+        let font_sprites: [u8; 80] = [
+            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+            0x20, 0x60, 0x20, 0x20, 0x70, // 1
+            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // F
+        ];
 
-    self.ram[0x050..0x050 + font_sprites.len()].copy_from_slice(&font_sprites);
-}
+        self.ram[0x050..0x050 + font_sprites.len()].copy_from_slice(&font_sprites);
+    }
+
+    fn init_window(&mut self) -> Result<(), anyhow::Error> {
+        self.window = Some(Window::new(
+            "Chip-8 emulator",
+            WIDTH,
+            HEIGHT,
+            WindowOptions {
+                resize: false,
+                ..WindowOptions::default()
+            },
+        )?);
+        Ok(())
+    }
+    fn convert_display_to_buffer(&self) -> Vec<u32> {
+        let mut buffer: Vec<u32> = Vec::with_capacity(WIDTH * HEIGHT);
+
+        for row in self.display.iter() {
+            for &pixel in row.iter() {
+                let color = if pixel { 0xFFFFFF } else { 0x000000 };
+                buffer.push(color);
+            }
+        }
+
+        buffer
+    }
+
+    fn write_to_window(&mut self) -> Result<(), anyhow::Error> {
+        let buffer = self.convert_display_to_buffer();
+        if let Some(window) = &mut self.window {
+            window.update_with_buffer(&buffer, WIDTH, HEIGHT)?
+        }
+        Ok(())
+    }
 }
 
 impl Default for Emulator {
@@ -59,6 +100,8 @@ impl Default for Emulator {
             pc: 0x200,
             sp: 0,
             stack: [0x0; 16],
+            window: None,
+            display: [[false; WIDTH]; HEIGHT],
         }
     }
 }
@@ -66,6 +109,7 @@ impl Default for Emulator {
 fn main() -> Result<(), anyhow::Error> {
     let mut emulator = Emulator::default();
     emulator.load_rom("Pong (1 player).ch8")?;
+    emulator.init_window()?;
     loop {
         let instruction_high = emulator.ram[emulator.pc as usize];
         let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
@@ -84,6 +128,7 @@ fn main() -> Result<(), anyhow::Error> {
                 instruction_high, instruction_low
             ),
         };
+        emulator.write_to_window()?;
         emulator.pc += 2;
     }
 }
