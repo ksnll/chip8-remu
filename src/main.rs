@@ -43,8 +43,18 @@ fn main() -> Result<(), anyhow::Error> {
     let mut emulator = Emulator::default();
     emulator.load_rom("Pong (1 player).ch8")?;
     loop {
-        let instruction: u16 = ((emulator.ram[emulator.pc as usize] as u16) << 8)
-            | emulator.ram[(emulator.pc + 1) as usize] as u16;
-        println!("{:04x}", instruction);
+        let instruction_high = emulator.ram[emulator.pc as usize];
+        let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
+        match (instruction_high, instruction_low) {
+            (0x60..=0x6F, byte) => {
+                let nibble = instruction_high & 0x0F;
+                emulator.registers[nibble as usize] = instruction_low;
+            }
+            _ => panic!(
+                "Instruction {:02x}{:02x} not implemented",
+                instruction_high, instruction_low
+            ),
+        };
+        emulator.pc += 2;
     }
 }
