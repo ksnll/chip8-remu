@@ -1,4 +1,7 @@
+use std::{thread::sleep, time::Duration};
+
 use minifb::{Window, WindowOptions};
+use tracing::info;
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
 
@@ -20,7 +23,16 @@ struct Emulator {
     /// Minibuf window
     window: Option<Window>,
     /// Display
-    display: [[bool; WIDTH]; HEIGHT],
+    display: [u8; WIDTH * HEIGHT],
+}
+
+/// The `Sprite` struct represent a sprite
+struct Sprite {
+    x: u8,
+    y: u8,
+    height: u8,
+    width: u8,
+    content: Vec<u8>,
 }
 
 impl Emulator {
@@ -73,12 +85,12 @@ impl Emulator {
         let mut buffer: Vec<u32> = Vec::with_capacity(WIDTH * HEIGHT);
 
         for row in self.display.iter() {
-            for &pixel in row.iter() {
-                let color = if pixel { 0xFFFFFF } else { 0x000000 };
+            for bit_index in 0..8 {
+                let first_bit: bool = ((row >> (7 - bit_index)) & 0x1) > 0;
+                let color = if first_bit { 0xFFFF } else { 0x0000 };
                 buffer.push(color);
             }
         }
-
         buffer
     }
 
@@ -88,6 +100,25 @@ impl Emulator {
             window.update_with_buffer(&buffer, WIDTH, HEIGHT)?
         }
         Ok(())
+    }
+
+    fn load_sprite(&mut self, sprite: Sprite) {
+        self.registers[0xF] = 0;
+        for y_offset in 0..sprite.height {
+            let content_byte: u8 = sprite.content[y_offset as usize];
+            for x_offset in 0..sprite.width {
+                let x = (sprite.x + x_offset) as usize % WIDTH;
+                let y = (sprite.y + y_offset) as usize % HEIGHT;
+                let pixel_index = x + y * WIDTH;
+
+                let sprite_pixel = (content_byte >> (7 - x_offset)) & 0x1;
+
+                if self.display[pixel_index] == 1 && sprite_pixel == 1 {
+                    self.registers[0xF] = 1;
+                }
+                self.display[pixel_index] ^= sprite_pixel;
+            }
+        }
     }
 }
 
@@ -101,12 +132,15 @@ impl Default for Emulator {
             sp: 0,
             stack: [0x0; 16],
             window: None,
-            display: [[false; WIDTH]; HEIGHT],
+            display: [0x0; WIDTH * HEIGHT],
         }
     }
 }
 
 fn main() -> Result<(), anyhow::Error> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
     let mut emulator = Emulator::default();
     emulator.load_rom("Pong (1 player).ch8")?;
     emulator.init_window()?;
@@ -117,10 +151,31 @@ fn main() -> Result<(), anyhow::Error> {
             0x60..=0x6F => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = instruction_low;
+                info!(
+                    "Loading value {:2x} inside register {:x}",
+                    instruction_low, nibble
+                )
             }
             0xA0..=0xAF => {
                 let value = ((instruction_low & 0x0F) as u16) << 8 | instruction_high as u16;
                 emulator.register_i = value;
+                info!("Loading value {:2x} inside register I", value);
+            }
+            0xD0..0xDF => {
+                let x_registry = instruction_high & 0x0F;
+                let y_registry = instruction_low >> 4;
+                let sprite_height = instruction_low & 0x0F;
+                let x_pos = emulator.registers[x_registry as usize];
+                let y_pos = emulator.registers[y_registry as usize];
+                emulator.load_sprite(Sprite {
+                    x: x_pos,
+                    y: y_pos,
+                    width: 8,
+                    height: sprite_height,
+                    content: emulator.ram[emulator.register_i as usize..8 * sprite_height as usize]
+                        .to_vec(),
+                });
+                info!("Loading sprite in pos {x_pos},{y_pos} of height {sprite_height}");
             }
 
             _ => panic!(
@@ -130,5 +185,6 @@ fn main() -> Result<(), anyhow::Error> {
         };
         emulator.write_to_window()?;
         emulator.pc += 2;
+        sleep(Duration::from_secs(2));
     }
 }
