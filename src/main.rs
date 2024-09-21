@@ -45,11 +45,16 @@ fn main() -> Result<(), anyhow::Error> {
     loop {
         let instruction_high = emulator.ram[emulator.pc as usize];
         let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
-        match (instruction_high, instruction_low) {
-            (0x60..=0x6F, byte) => {
+        match instruction_high {
+            0x60..=0x6F => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = instruction_low;
             }
+            0xA0..=0xAF => {
+                let value = ((instruction_low & 0x0F) as u16) << 8 | instruction_high as u16;
+                emulator.register_i = value;
+            }
+
             _ => panic!(
                 "Instruction {:02x}{:02x} not implemented",
                 instruction_high, instruction_low
