@@ -75,7 +75,7 @@ impl Emulator {
             WIDTH,
             HEIGHT,
             WindowOptions {
-                resize: false,
+                resize: true,
                 ..WindowOptions::default()
             },
         )?);
@@ -140,7 +140,7 @@ impl Default for Emulator {
             sp: 0,
             stack: [0x0; 16],
             window: None,
-            display: [0x0; WIDTH/8 * HEIGHT],
+            display: [0x0; WIDTH / 8 * HEIGHT],
         }
     }
 }
@@ -190,13 +190,15 @@ fn main() -> Result<(), anyhow::Error> {
             }
             0x20..0x2F => {}
 
-            _ => panic!(
-                "Instruction {:02x}{:02x} not implemented",
-                instruction_high, instruction_low
-            ),
+            _ => {
+                sleep(Duration::from_secs(2));
+                println!(
+                    "Instruction {:02x}{:02x} not implemented",
+                    instruction_high, instruction_low
+                )
+            }
         };
         emulator.write_to_window()?;
         emulator.pc += 2;
-        sleep(Duration::from_secs(2));
     }
 }
