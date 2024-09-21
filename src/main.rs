@@ -19,11 +19,11 @@ struct Emulator {
     /// Stack pointer (SP), pointing to the current level of the call stack.
     sp: u8,
     /// Call stack, used for handling subroutines.
-    stack: [u8; 16],
+    stack: [u16; 16],
     /// Minibuf window
     window: Option<Window>,
     /// Display
-    display: [u8; WIDTH * HEIGHT],
+    display: [u8; (WIDTH / 8) * HEIGHT],
 }
 
 /// The `Sprite` struct represent a sprite
@@ -104,19 +104,27 @@ impl Emulator {
 
     fn load_sprite(&mut self, sprite: Sprite) {
         self.registers[0xF] = 0;
+
         for y_offset in 0..sprite.height {
             let content_byte: u8 = sprite.content[y_offset as usize];
+            let y = (sprite.y + y_offset) as usize % HEIGHT;
+
             for x_offset in 0..sprite.width {
                 let x = (sprite.x + x_offset) as usize % WIDTH;
-                let y = (sprite.y + y_offset) as usize % HEIGHT;
-                let pixel_index = x + y * WIDTH;
+
+                let byte_index = (x / 8) + y * (WIDTH / 8);
+                let bit_position = 7 - (x % 8);
+
+                let display_byte = self.display[byte_index];
+                let display_pixel = (display_byte >> bit_position) & 0x1;
 
                 let sprite_pixel = (content_byte >> (7 - x_offset)) & 0x1;
 
-                if self.display[pixel_index] == 1 && sprite_pixel == 1 {
+                if display_pixel == 1 && sprite_pixel == 1 {
                     self.registers[0xF] = 1;
                 }
-                self.display[pixel_index] ^= sprite_pixel;
+
+                self.display[byte_index] ^= sprite_pixel << bit_position;
             }
         }
     }
@@ -132,7 +140,7 @@ impl Default for Emulator {
             sp: 0,
             stack: [0x0; 16],
             window: None,
-            display: [0x0; WIDTH * HEIGHT],
+            display: [0x0; WIDTH/8 * HEIGHT],
         }
     }
 }
@@ -157,7 +165,7 @@ fn main() -> Result<(), anyhow::Error> {
                 )
             }
             0xA0..=0xAF => {
-                let value = ((instruction_low & 0x0F) as u16) << 8 | instruction_high as u16;
+                let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.register_i = value;
                 info!("Loading value {:2x} inside register I", value);
             }
@@ -167,16 +175,20 @@ fn main() -> Result<(), anyhow::Error> {
                 let sprite_height = instruction_low & 0x0F;
                 let x_pos = emulator.registers[x_registry as usize];
                 let y_pos = emulator.registers[y_registry as usize];
+                let sprite_content = emulator.ram[emulator.register_i as usize
+                    ..(emulator.register_i as usize + sprite_height as usize)]
+                    .to_vec();
+
                 emulator.load_sprite(Sprite {
                     x: x_pos,
                     y: y_pos,
                     width: 8,
                     height: sprite_height,
-                    content: emulator.ram[emulator.register_i as usize..8 * sprite_height as usize]
-                        .to_vec(),
+                    content: sprite_content,
                 });
                 info!("Loading sprite in pos {x_pos},{y_pos} of height {sprite_height}");
             }
+            0x20..0x2F => {}
 
             _ => panic!(
                 "Instruction {:02x}{:02x} not implemented",
