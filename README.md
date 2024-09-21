@@ -1,3 +1,4 @@
-### Chip 9 emulator in rust
+### Chip 8 emulator in rust
 
-This is a personal learning project
+Personal toy project to learn more about emulation in rust
+
