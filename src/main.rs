@@ -155,8 +155,8 @@ fn main() -> Result<(), anyhow::Error> {
     loop {
         let instruction_high = emulator.ram[emulator.pc as usize];
         let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
-        match instruction_high {
-            0x60..=0x6F => {
+        match (instruction_high, instruction_low) {
+            (0x60..=0x6F, _) => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = instruction_low;
                 info!(
@@ -164,12 +164,12 @@ fn main() -> Result<(), anyhow::Error> {
                     instruction_low, nibble
                 )
             }
-            0xA0..=0xAF => {
+            (0xA0..=0xAF, _) => {
                 let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.register_i = value;
                 info!("Loading value {:2x} inside register I", value);
             }
-            0xD0..0xDF => {
+            (0xD0..=0xDF, _) => {
                 let x_registry = instruction_high & 0x0F;
                 let y_registry = instruction_low >> 4;
                 let sprite_height = instruction_low & 0x0F;
@@ -188,14 +188,34 @@ fn main() -> Result<(), anyhow::Error> {
                 });
                 info!("Loading sprite in pos {x_pos},{y_pos} of height {sprite_height}");
             }
-            0x20..0x2F => {}
-
+            (0x20..=0x2F, _) => {
+                let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
+                emulator.stack[emulator.sp as usize] = emulator.pc + 2;
+                emulator.sp += 1;
+                emulator.pc = value;
+            }
+            (0xF0..=0xFF, 0x65) => {
+                let x = (instruction_high & 0x0F) as usize;
+                for i in 0..=x {
+                    emulator.registers[i] = emulator.ram[emulator.register_i as usize + i]
+                }
+            }
+            (0xF0..=0xFF, 0x33) => {
+                let nibble = instruction_high & 0x0F;
+                let number = emulator.registers[nibble as usize];
+                let value_unit = number % 10;
+                let value_tens = (number % 10) / 10;
+                let value_hundreds = (number % 100) / 10;
+                emulator.ram[emulator.register_i as usize] = value_hundreds;
+                emulator.ram[emulator.register_i as usize + 1] = value_tens;
+                emulator.ram[emulator.register_i as usize + 2] = value_unit;
+            }
             _ => {
-                sleep(Duration::from_secs(2));
                 println!(
                     "Instruction {:02x}{:02x} not implemented",
                     instruction_high, instruction_low
-                )
+                );
+                sleep(Duration::from_secs(2));
             }
         };
         emulator.write_to_window()?;
