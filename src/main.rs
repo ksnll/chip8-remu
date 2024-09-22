@@ -4,6 +4,7 @@ use std::{
 };
 
 use minifb::{Window, WindowOptions};
+use rand::Rng;
 use tracing::{info, warn};
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
@@ -178,14 +179,14 @@ fn main() -> Result<(), anyhow::Error> {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = instruction_low;
                 info!(
-                    "Loading value {:2x} inside register {:x}",
+                    "Loading value {:2x} inside V{:x}",
                     instruction_low, nibble
                 )
             }
             (0xA0..=0xAF, _) => {
                 let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.register_i = value;
-                info!("Loading value {:2x} inside register I", value);
+                info!("Loading value {:2x} inside VI", value);
             }
             (0xD0..=0xDF, _) => {
                 let x_registry = instruction_high & 0x0F;
@@ -218,7 +219,7 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.registers[nibble as usize] =
                     emulator.registers[nibble as usize].wrapping_add(instruction_low);
                 info!(
-                    "loading value {:4x} into register {nibble}",
+                    "loading value {:4x} into V{nibble}",
                     instruction_low
                 )
             }
@@ -227,7 +228,7 @@ fn main() -> Result<(), anyhow::Error> {
                 let ret = emulator.stack[emulator.sp as usize];
                 emulator.pc = ret;
                 info!("Returning to address {:4x}", ret);
-                continue
+                continue;
             }
             (0xF0..=0xFF, 0x65) => {
                 let x = (instruction_high & 0x0F) as usize;
@@ -246,7 +247,7 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.ram[emulator.register_i as usize] = value_hundreds;
                 emulator.ram[emulator.register_i as usize + 1] = value_tens;
                 emulator.ram[emulator.register_i as usize + 2] = value_unit;
-                info!("Loading into register_i[0..3] values {value_hundreds}, {value_tens}, {value_unit}")
+                info!("Loading into VI[0..3] values {value_hundreds}, {value_tens}, {value_unit}")
             }
             (0xF0..=0xFF, 0x29) => {
                 let x = (instruction_high & 0x0F) as usize;
@@ -258,12 +259,12 @@ fn main() -> Result<(), anyhow::Error> {
             (0xF0..=0xFF, 0x07) => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = emulator.register_dt;
-                info!("Loading dt into register {nibble}")
+                info!("Loading dt into V{nibble}")
             }
             (0xF0..=0xFF, 0x15) => {
                 let nibble = instruction_high & 0x0F;
                 emulator.register_dt = emulator.registers[nibble as usize];
-                info!("Loading register {nibble} into dt")
+                info!("Loading V{nibble} into dt")
             }
             (0x30..=0x3F, _) => {
                 let nibble = instruction_high & 0x0F;
@@ -271,7 +272,7 @@ fn main() -> Result<(), anyhow::Error> {
                     emulator.pc += 2;
                 }
                 info!(
-                    "Incrementing pc if register {nibble} ({:02x}) is equal to {:04x} ",
+                    "Incrementing pc if V{nibble} ({:02x}) is equal to {:04x} ",
                     emulator.registers[nibble as usize], instruction_low
                 )
             }
@@ -279,7 +280,13 @@ fn main() -> Result<(), anyhow::Error> {
                 let address = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.pc = address;
                 info!("Jumping to {:04x}", address);
-                continue
+                continue;
+            }
+            (0xC0..=0xCF, _) => {
+                let random_number: u8 = rand::thread_rng().gen();
+                let nibble = instruction_high & 0x0F;
+                emulator.registers[nibble as usize] = random_number & instruction_low;
+                info!("Adding random value to V{nibble}");
             }
             _ => {
                 println!(
