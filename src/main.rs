@@ -196,22 +196,19 @@ fn main() -> Result<(), anyhow::Error> {
 
         let instruction_high = emulator.ram[emulator.pc as usize];
         let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
-        info!(
-            "Instruction {:02x} {:02x}",
-            instruction_high, instruction_low
-        );
-        match (instruction_high, instruction_low) {
-            (0x60..=0x6F, _) => {
+        let instruction = (instruction_high as u16) << 8 | instruction_low as u16;
+        match instruction {
+            0x6000..=0x6FFF => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = instruction_low;
                 info!("Loading value {:2x} inside V{:x}", instruction_low, nibble)
             }
-            (0xA0..=0xAF, _) => {
+            0xA000..=0xAFFF => {
                 let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.register_i = value;
                 info!("Loading value {:2x} inside VI", value);
             }
-            (0xD0..=0xDF, _) => {
+            0xD000..=0xDFFF => {
                 let x_registry = instruction_high & 0x0F;
                 let y_registry = instruction_low >> 4;
                 let sprite_height = instruction_low & 0x0F;
@@ -230,27 +227,27 @@ fn main() -> Result<(), anyhow::Error> {
                 });
                 info!("Loading sprite in pos {x_pos},{y_pos} of height {sprite_height}");
             }
-            (0x20..=0x2F, _) => {
+            0x2000..=0x2FFF => {
                 let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.stack[emulator.sp as usize] = emulator.pc + 2;
                 emulator.sp += 1;
                 emulator.pc = value;
                 info!("Calling routine at {:4x}", value)
             }
-            (0x70..=0x7F, _) => {
+            0x7000..=0x7FFF => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] =
                     emulator.registers[nibble as usize].wrapping_add(instruction_low);
                 info!("loading value {:4x} into V{nibble}", instruction_low)
             }
-            (0x00, 0xEE) => {
+            0x00EE => {
                 emulator.sp -= 1;
                 let ret = emulator.stack[emulator.sp as usize];
                 emulator.pc = ret;
                 info!("Returning to address {:4x}", ret);
                 continue;
             }
-            (0xF0..=0xFF, 0x65) => {
+            0xF065..=0xFF65 if instruction & 0xFF == 0x65 => {
                 let x = (instruction_high & 0x0F) as usize;
                 for i in 0..=x {
                     emulator.registers[i] = emulator.ram[emulator.register_i as usize + i]
@@ -258,7 +255,7 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.register_i += x as u16 + 1;
                 info!("Loading {x} values into registers")
             }
-            (0xF0..=0xFF, 0x33) => {
+            0xF033..=0xFF33 if instruction & 0xFF == 0x33 => {
                 let nibble = instruction_high & 0x0F;
                 let number = emulator.registers[nibble as usize];
                 let value_unit = number % 10;
@@ -269,24 +266,24 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.ram[emulator.register_i as usize + 2] = value_unit;
                 info!("Loading into VI[0..3] values {value_hundreds}, {value_tens}, {value_unit}")
             }
-            (0xF0..=0xFF, 0x29) => {
+            0xF029..=0xFF29 if instruction & 0xFF == 0x29 => {
                 let x = (instruction_high & 0x0F) as usize;
                 let sprite_value = emulator.registers[x];
                 emulator.register_i = 0x50 + (sprite_value as u16 * 5);
                 info!("Loading embedded sprite number {sprite_value}")
             }
 
-            (0xF0..=0xFF, 0x07) => {
+            0xF007..=0xFF07 if instruction & 0xFF == 0x07 => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = emulator.register_dt;
                 info!("Loading dt into V{nibble}")
             }
-            (0xF0..=0xFF, 0x15) => {
+            0xF015..=0xFF15 if instruction & 0xFF == 0x15 => {
                 let nibble = instruction_high & 0x0F;
                 emulator.register_dt = emulator.registers[nibble as usize];
                 info!("Loading V{nibble} into dt")
             }
-            (0x30..=0x3F, _) => {
+            0x3000..=0x3FFF => {
                 let nibble = instruction_high & 0x0F;
                 if emulator.registers[nibble as usize] == instruction_low {
                     emulator.pc += 2;
@@ -296,25 +293,35 @@ fn main() -> Result<(), anyhow::Error> {
                     emulator.registers[nibble as usize], instruction_low
                 )
             }
-            (0x10..=0x1F, _) => {
+            0x1000..=0x1FFF => {
                 let address = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.pc = address;
                 info!("Jumping to {:04x}", address);
                 continue;
             }
-            (0xC0..=0xCF, _) => {
+            0xC000..=0xCFFF => {
                 let random_number: u8 = rand::thread_rng().gen();
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = random_number & instruction_low;
                 info!("Adding random value to V{nibble}");
             }
-            (0xE0..=0xEF, 0x9E) => {
+            0xE09E..=0xEF9E if instruction & 0xFF ==  0x9E => {
                 if let Some(window) = &emulator.window {
                     let nibble = instruction_high & 0x0F;
                     if window.is_key_down(u8_to_key(emulator.registers[nibble as usize])) {
                         emulator.pc += 2;
                     }
                     info!("Checking if key is down");
+                    continue;
+                }
+            }
+            0xE0A1..=0xEFA1 if instruction & 0xFF ==  0xA1 => {
+                if let Some(window) = &emulator.window {
+                    let nibble = instruction_high & 0x0F;
+                    if !window.is_key_down(u8_to_key(emulator.registers[nibble as usize])) {
+                        emulator.pc += 2;
+                    }
+                    info!("Checking if key is up");
                     continue;
                 }
             }
