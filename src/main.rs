@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use minifb::{Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions};
 use rand::Rng;
 use tracing::{info, warn};
 const WIDTH: usize = 64;
@@ -152,6 +152,32 @@ impl Default for Emulator {
     }
 }
 
+fn u8_to_key(key: u8) -> Key {
+    match key {
+        0x01 => Key::Key1,
+        0x02 => Key::Key2,
+        0x03 => Key::Key3,
+        0x0C => Key::Key4,
+
+        0x04 => Key::Q,
+        0x05 => Key::W,
+        0x06 => Key::E,
+        0x0D => Key::R,
+
+        0x07 => Key::A,
+        0x08 => Key::S,
+        0x09 => Key::D,
+        0x0E => Key::F,
+
+        0x0A => Key::Z,
+        0x00 => Key::X,
+        0x0B => Key::C,
+        0x0F => Key::V,
+
+        _ => Key::Key1,
+    }
+}
+
 fn main() -> Result<(), anyhow::Error> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -282,10 +308,16 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.registers[nibble as usize] = random_number & instruction_low;
                 info!("Adding random value to V{nibble}");
             }
-            // (0xE0..=0xEF, 0x9E) => {
-            //
-            //
-            // }
+            (0xE0..=0xEF, 0x9E) => {
+                if let Some(window) = &emulator.window {
+                    let nibble = instruction_high & 0x0F;
+                    if window.is_key_down(u8_to_key(emulator.registers[nibble as usize])) {
+                        emulator.pc += 2;
+                    }
+                    info!("Checking if key is down");
+                    continue;
+                }
+            }
             _ => {
                 println!(
                     "Instruction {:02x}{:02x} not implemented",
