@@ -28,7 +28,7 @@ struct Emulator {
     /// Display
     display: [u8; (WIDTH / 8) * HEIGHT],
     /// Delay timer
-    register_dt: u8
+    register_dt: u8,
 }
 
 /// The `Sprite` struct represent a sprite
@@ -251,14 +251,26 @@ fn main() -> Result<(), anyhow::Error> {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = emulator.register_dt;
                 info!("Loading dt into register {nibble}")
-
-
             }
             (0xF0..=0xFF, 0x15) => {
                 let nibble = instruction_high & 0x0F;
-                emulator.register_dt = emulator.registers[nibble as usize] ;
+                emulator.register_dt = emulator.registers[nibble as usize];
                 info!("Loading register {nibble} into dt")
-
+            }
+            (0x30..=0x3F, _) => {
+                let nibble = instruction_high & 0x0F;
+                if emulator.registers[nibble as usize] == instruction_low {
+                    emulator.pc += 2;
+                }
+                info!(
+                    "Incrementing pc if register {nibble} ({:02x}) is equal to {:04x} ",
+                    emulator.registers[nibble as usize], instruction_low
+                )
+            }
+            (0x10..=0x1F, _) => {
+                let address = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
+                emulator.pc = address;
+                info!("Jumping to {:04x}", address)
             }
             _ => {
                 println!(
