@@ -4,7 +4,7 @@ use std::{
 };
 
 use minifb::{Window, WindowOptions};
-use tracing::info;
+use tracing::{info, warn};
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
 
@@ -158,9 +158,14 @@ fn main() -> Result<(), anyhow::Error> {
     let mut emulator = Emulator::default();
     emulator.load_rom("Pong (1 player).ch8")?;
     emulator.init_window()?;
-    let frame_duration = Duration::from_millis(1000 / 60);
+    let mut last_timer_update = Instant::now();
     loop {
-        let start_time = Instant::now();
+        if last_timer_update.elapsed() >= Duration::from_millis(16) {
+            if emulator.register_dt > 0 {
+                emulator.register_dt -= 1;
+            }
+            last_timer_update = Instant::now();
+        }
 
         let instruction_high = emulator.ram[emulator.pc as usize];
         let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
@@ -221,7 +226,8 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.sp -= 1;
                 let ret = emulator.stack[emulator.sp as usize];
                 emulator.pc = ret;
-                info!("Returning to address {:4x}", ret)
+                info!("Returning to address {:4x}", ret);
+                continue
             }
             (0xF0..=0xFF, 0x65) => {
                 let x = (instruction_high & 0x0F) as usize;
@@ -272,7 +278,8 @@ fn main() -> Result<(), anyhow::Error> {
             (0x10..=0x1F, _) => {
                 let address = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
                 emulator.pc = address;
-                info!("Jumping to {:04x}", address)
+                info!("Jumping to {:04x}", address);
+                continue
             }
             _ => {
                 println!(
@@ -283,12 +290,5 @@ fn main() -> Result<(), anyhow::Error> {
         };
         emulator.write_to_window()?;
         emulator.pc += 2;
-        if emulator.register_dt > 0 {
-            emulator.register_dt -= 1;
-        }
-        let elapsed_time = start_time.elapsed();
-        if frame_duration > elapsed_time {
-            sleep(frame_duration - elapsed_time);
-        }
     }
 }
