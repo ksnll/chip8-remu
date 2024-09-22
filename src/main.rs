@@ -1,4 +1,7 @@
-use std::{thread::sleep, time::Duration};
+use std::{
+    thread::sleep,
+    time::{Duration, Instant},
+};
 
 use minifb::{Window, WindowOptions};
 use tracing::info;
@@ -152,9 +155,16 @@ fn main() -> Result<(), anyhow::Error> {
     let mut emulator = Emulator::default();
     emulator.load_rom("Pong (1 player).ch8")?;
     emulator.init_window()?;
+    let frame_duration = Duration::from_millis(1000 / 60);
     loop {
+        let start_time = Instant::now();
+
         let instruction_high = emulator.ram[emulator.pc as usize];
         let instruction_low = emulator.ram[(emulator.pc + 1) as usize];
+        info!(
+            "Instruction {:02x} {:02x}",
+            instruction_high, instruction_low
+        );
         match (instruction_high, instruction_low) {
             (0x60..=0x6F, _) => {
                 let nibble = instruction_high & 0x0F;
@@ -193,32 +203,58 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.stack[emulator.sp as usize] = emulator.pc + 2;
                 emulator.sp += 1;
                 emulator.pc = value;
+                info!("Calling routine at {:4x}", value)
+            }
+            (0x70..=0x7F, _) => {
+                let nibble = instruction_high & 0x0F;
+                emulator.registers[nibble as usize] += instruction_low;
+                info!(
+                    "loading valuet {:4x} into register {nibble}",
+                    instruction_low
+                )
+            }
+            (0x00, 0xEE) => {
+                emulator.sp -= 1;
+                let ret = emulator.stack[emulator.sp as usize];
+                emulator.pc = ret;
+                info!("Returning to address {:4x}", ret)
             }
             (0xF0..=0xFF, 0x65) => {
                 let x = (instruction_high & 0x0F) as usize;
                 for i in 0..=x {
                     emulator.registers[i] = emulator.ram[emulator.register_i as usize + i]
                 }
+                info!("Loading {x} values into registers")
             }
             (0xF0..=0xFF, 0x33) => {
                 let nibble = instruction_high & 0x0F;
                 let number = emulator.registers[nibble as usize];
                 let value_unit = number % 10;
                 let value_tens = (number % 10) / 10;
-                let value_hundreds = (number % 100) / 10;
+                let value_hundreds = (number / 100) % 10;
                 emulator.ram[emulator.register_i as usize] = value_hundreds;
                 emulator.ram[emulator.register_i as usize + 1] = value_tens;
                 emulator.ram[emulator.register_i as usize + 2] = value_unit;
+                info!("Loading into register_i[0..3] values {value_hundreds}, {value_tens}, {value_unit}")
+            }
+            (0xF0..=0xFF, 0x29) => {
+                let x = (instruction_high & 0x0F) as usize;
+                let sprite_value = emulator.registers[x];
+                emulator.register_i = 0x50 + (sprite_value as u16 * 5);
+                info!("Loading embedded sprite number {sprite_value}")
             }
             _ => {
                 println!(
                     "Instruction {:02x}{:02x} not implemented",
                     instruction_high, instruction_low
                 );
-                sleep(Duration::from_secs(2));
             }
         };
         emulator.write_to_window()?;
         emulator.pc += 2;
+        let elapsed_time = start_time.elapsed();
+        if frame_duration > elapsed_time {
+            sleep(frame_duration - elapsed_time);
+        }
     }
 }
