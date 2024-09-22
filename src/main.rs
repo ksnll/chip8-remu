@@ -231,7 +231,7 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.stack[emulator.sp as usize] = emulator.pc + 2;
                 emulator.sp += 1;
                 emulator.pc = nnn;
-                info!("Calling routine at {:4x}", value)
+                info!("Calling routine at {:4x}", nnn)
             }
             0x7000..=0x7FFF => {
                 emulator.registers[nibble as usize] =
