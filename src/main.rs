@@ -27,6 +27,8 @@ struct Emulator {
     window: Option<Window>,
     /// Display
     display: [u8; (WIDTH / 8) * HEIGHT],
+    /// Delay timer
+    register_dt: u8
 }
 
 /// The `Sprite` struct represent a sprite
@@ -144,6 +146,7 @@ impl Default for Emulator {
             stack: [0x0; 16],
             window: None,
             display: [0x0; WIDTH / 8 * HEIGHT],
+            register_dt: 0,
         }
     }
 }
@@ -243,6 +246,20 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.register_i = 0x50 + (sprite_value as u16 * 5);
                 info!("Loading embedded sprite number {sprite_value}")
             }
+
+            (0xF0..=0xFF, 0x07) => {
+                let nibble = instruction_high & 0x0F;
+                emulator.registers[nibble as usize] = emulator.register_dt;
+                info!("Loading dt into register {nibble}")
+
+
+            }
+            (0xF0..=0xFF, 0x15) => {
+                let nibble = instruction_high & 0x0F;
+                emulator.register_dt = emulator.registers[nibble as usize] ;
+                info!("Loading register {nibble} into dt")
+
+            }
             _ => {
                 println!(
                     "Instruction {:02x}{:02x} not implemented",
@@ -252,6 +269,9 @@ fn main() -> Result<(), anyhow::Error> {
         };
         emulator.write_to_window()?;
         emulator.pc += 2;
+        if emulator.register_dt > 0 {
+            emulator.register_dt -= 1;
+        }
         let elapsed_time = start_time.elapsed();
         if frame_duration > elapsed_time {
             sleep(frame_duration - elapsed_time);
