@@ -178,10 +178,7 @@ fn main() -> Result<(), anyhow::Error> {
             (0x60..=0x6F, _) => {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] = instruction_low;
-                info!(
-                    "Loading value {:2x} inside V{:x}",
-                    instruction_low, nibble
-                )
+                info!("Loading value {:2x} inside V{:x}", instruction_low, nibble)
             }
             (0xA0..=0xAF, _) => {
                 let value = ((instruction_high as u16 & 0x0F) << 8) | instruction_low as u16;
@@ -218,10 +215,7 @@ fn main() -> Result<(), anyhow::Error> {
                 let nibble = instruction_high & 0x0F;
                 emulator.registers[nibble as usize] =
                     emulator.registers[nibble as usize].wrapping_add(instruction_low);
-                info!(
-                    "loading value {:4x} into V{nibble}",
-                    instruction_low
-                )
+                info!("loading value {:4x} into V{nibble}", instruction_low)
             }
             (0x00, 0xEE) => {
                 emulator.sp -= 1;
@@ -288,6 +282,10 @@ fn main() -> Result<(), anyhow::Error> {
                 emulator.registers[nibble as usize] = random_number & instruction_low;
                 info!("Adding random value to V{nibble}");
             }
+            // (0xE0..=0xEF, 0x9E) => {
+            //
+            //
+            // }
             _ => {
                 println!(
                     "Instruction {:02x}{:02x} not implemented",
