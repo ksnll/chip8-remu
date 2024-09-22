@@ -210,9 +210,10 @@ fn main() -> Result<(), anyhow::Error> {
             }
             (0x70..=0x7F, _) => {
                 let nibble = instruction_high & 0x0F;
-                emulator.registers[nibble as usize] += instruction_low;
+                emulator.registers[nibble as usize] =
+                    emulator.registers[nibble as usize].wrapping_add(instruction_low);
                 info!(
-                    "loading valuet {:4x} into register {nibble}",
+                    "loading value {:4x} into register {nibble}",
                     instruction_low
                 )
             }
@@ -227,13 +228,14 @@ fn main() -> Result<(), anyhow::Error> {
                 for i in 0..=x {
                     emulator.registers[i] = emulator.ram[emulator.register_i as usize + i]
                 }
+                emulator.register_i += x as u16 + 1;
                 info!("Loading {x} values into registers")
             }
             (0xF0..=0xFF, 0x33) => {
                 let nibble = instruction_high & 0x0F;
                 let number = emulator.registers[nibble as usize];
                 let value_unit = number % 10;
-                let value_tens = (number % 10) / 10;
+                let value_tens = (number / 10) % 10;
                 let value_hundreds = (number / 100) % 10;
                 emulator.ram[emulator.register_i as usize] = value_hundreds;
                 emulator.ram[emulator.register_i as usize + 1] = value_tens;
